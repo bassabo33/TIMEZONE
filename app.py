@@ -1,6 +1,6 @@
 
 import streamlit as st
-from datetime import datetime, time, timedelta
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 # ============================================================
@@ -72,41 +72,12 @@ st.markdown("""
         margin-bottom: 24px;
     }
 
-    .taiwan-card {
-        background-color: #EAF2FF;
-        border: 1px solid #C7D7F5;
-        border-radius: 10px;
-        padding: 16px 20px;
-        margin-bottom: 24px;
-    }
-
-    .taiwan-label {
-        font-size: 14px;
-        color: #315A91;
-        font-weight: bold;
-    }
-
-    .taiwan-time {
-        font-family: Consolas, monospace;
-        font-size: 30px;
-        font-weight: bold;
-        color: #174A8B;
-    }
-
     .column-header {
         font-family: "Microsoft JhengHei", sans-serif;
         font-size: 14px;
         font-weight: bold;
         color: #555555;
         padding: 0 8px 8px 8px;
-    }
-
-    .city-row {
-        background-color: #FFFFFF;
-        border: 1px solid #EAECF0;
-        border-radius: 9px;
-        padding: 12px;
-        margin-bottom: 10px;
     }
 
     .result-time {
@@ -146,11 +117,9 @@ if "cities" not in st.session_state:
 if "selected_time" not in st.session_state:
     st.session_state.selected_time = "即時"
 
-if "time_selector" not in st.session_state:
-    st.session_state.time_selector = "即時"
-
-if "last_changed_time" not in st.session_state:
-    st.session_state.last_changed_time = "即時"
+for i in range(5):
+    if f"time_{i}" not in st.session_state:
+        st.session_state[f"time_{i}"] = "即時"
 
 
 # ============================================================
@@ -204,13 +173,12 @@ def format_day_difference(diff):
 #                    時間同步
 # ============================================================
 
-def sync_time():
+def sync_time(index):
     """當任意一列時間改變時，同步五列。"""
 
-    new_time = st.session_state.time_selector
+    new_time = st.session_state[f"time_{index}"]
 
     st.session_state.selected_time = new_time
-    st.session_state.last_changed_time = new_time
 
     for i in range(5):
         st.session_state[f"time_{i}"] = new_time
@@ -231,20 +199,6 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
-
-
-# ============================================================
-#                    台灣目前時間
-# ============================================================
-
-taiwan_now = datetime.now(TAIPEI_TZ)
-
-st.markdown(f"""
-<div class="taiwan-card">
-    <div class="taiwan-label">🇹🇼 台灣目前時間</div>
-    <div class="taiwan-time">{taiwan_now.strftime("%Y-%m-%d %H:%M:%S")}</div>
-</div>
-""", unsafe_allow_html=True)
 
 
 # ============================================================
@@ -307,21 +261,13 @@ for i in range(5):
 
     with time_col:
 
-        # 初始化各列時間
-        if f"time_{i}" not in st.session_state:
-            st.session_state[f"time_{i}"] = (
-                st.session_state.selected_time
-            )
-
         selected_time = st.selectbox(
             "當地時間",
             options=TIME_OPTIONS,
-            index=TIME_OPTIONS.index(
-                st.session_state.selected_time
-            ),
             key=f"time_{i}",
             label_visibility="collapsed",
-            on_change=sync_time
+            on_change=sync_time,
+            args=(i,)
         )
 
     # --------------------------------------------------------
@@ -337,10 +283,8 @@ for i in range(5):
     )
 
     if st.session_state.selected_time == "即時":
-        city_time_text = city_datetime.strftime("%H:%M:%S")
         taiwan_time_text = taiwan_datetime.strftime("%H:%M:%S")
     else:
-        city_time_text = city_datetime.strftime("%H:%M")
         taiwan_time_text = taiwan_datetime.strftime("%H:%M")
 
     # --------------------------------------------------------
@@ -370,16 +314,6 @@ st.markdown("""
     <br>
     ※ 每個城市依照自身時區與當地日期進行換算，並自動處理夏令時間。
     <br>
-    ※ 即時模式下，各城市顯示目前實際時間。
+    ※ 即時模式下，各城市顯示頁面最近一次更新時的時間。
 </div>
 """, unsafe_allow_html=True)
-
-
-# ============================================================
-#                    即時更新
-# ============================================================
-
-if st.session_state.selected_time == "即時":
-    import time as time_module
-    time_module.sleep(1)
-    st.rerun()
