@@ -1,6 +1,6 @@
 
 import streamlit as st
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 # ============================================================
@@ -56,7 +56,7 @@ st.markdown("""
     }
 
     .block-container {
-        max-width: 1100px;
+        max-width: 1250px;
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
@@ -97,6 +97,19 @@ st.markdown("""
         color: #777777;
     }
 
+    .timezone-note {
+        font-family: "Microsoft JhengHei", sans-serif;
+        font-size: 12px;
+        color: #555555;
+        line-height: 1.5;
+    }
+
+    .timezone-offset {
+        font-family: Consolas, monospace;
+        font-size: 12px;
+        color: #777777;
+    }
+
     .footer-note {
         font-family: "Microsoft JhengHei", sans-serif;
         font-size: 12px;
@@ -131,10 +144,10 @@ for i in range(5):
 # ============================================================
 
 def get_city_datetime(city_name):
-    """取得指定城市的時間。"""
+    """取得指定城市的當地時間。"""
 
-    timezone = ZoneInfo(CITIES[city_name])
-    city_now = datetime.now(timezone)
+    timezone_obj = ZoneInfo(CITIES[city_name])
+    city_now = datetime.now(timezone_obj)
 
     if st.session_state.selected_time == "即時":
         return city_now
@@ -161,7 +174,9 @@ def get_taiwan_datetime(city_datetime):
 def get_day_difference(city_datetime, taiwan_datetime):
     """計算兩地日期差異。"""
 
-    return (taiwan_datetime.date() - city_datetime.date()).days
+    return (
+        taiwan_datetime.date() - city_datetime.date()
+    ).days
 
 
 def format_day_difference(diff):
@@ -171,6 +186,76 @@ def format_day_difference(diff):
         return f"台灣 +{diff} 天"
     else:
         return f"台灣 {diff} 天"
+
+
+# ============================================================
+#                    時區備註
+# ============================================================
+
+def get_timezone_info(city_name, city_datetime):
+    """
+    根據城市當地時間判斷：
+    1. 是否使用夏令時間
+    2. 時區縮寫
+    3. UTC 時差
+    """
+
+    timezone_obj = ZoneInfo(CITIES[city_name])
+
+    # 取得該日期的 UTC 偏移
+    utc_offset = city_datetime.utcoffset()
+
+    if utc_offset is None:
+        utc_offset = timedelta(0)
+
+    total_seconds = int(utc_offset.total_seconds())
+
+    sign = "+" if total_seconds >= 0 else "-"
+    abs_seconds = abs(total_seconds)
+
+    hours = abs_seconds // 3600
+    minutes = (abs_seconds % 3600) // 60
+
+    utc_text = f"UTC{sign}{hours:02d}:{minutes:02d}"
+
+    # 取得時區縮寫
+    abbreviation = city_datetime.tzname() or ""
+
+    # 判斷是否為夏令時間
+    dst_offset = city_datetime.dst()
+
+    if dst_offset is None:
+        dst_offset = timedelta(0)
+
+    if dst_offset != timedelta(0):
+        status = "夏令時間"
+    else:
+        # 判斷該時區是否有其他日期會使用夏令時間
+        has_dst = False
+
+        for month in range(1, 13):
+            check_date = datetime(
+                city_datetime.year,
+                month,
+                15,
+                12,
+                0,
+                tzinfo=timezone_obj
+            )
+
+            if check_date.dst() not in (
+                None,
+                timedelta(0)
+            ):
+                has_dst = True
+                break
+
+        if has_dst:
+            status = "非夏令時間"
+        else:
+            status = "無夏令時間"
+
+    return status, abbreviation, utc_text
 
 
 # ============================================================
@@ -209,7 +294,10 @@ st.markdown(
 #                    欄位標題
 # ============================================================
 
-header1, header2, header3 = st.columns([2.2, 1.8, 2.2])
+header1, header2, header3, header4 = st.columns(
+    [2.0, 1.5, 2.0, 2.0],
+    vertical_alignment="center"
+)
 
 with header1:
     st.markdown(
@@ -229,6 +317,12 @@ with header3:
         unsafe_allow_html=True
     )
 
+with header4:
+    st.markdown(
+        '<div class="column-header">時區備註</div>',
+        unsafe_allow_html=True
+    )
+
 
 # ============================================================
 #                    五個城市時間列
@@ -236,8 +330,8 @@ with header3:
 
 for i in range(5):
 
-    city_col, time_col, result_col = st.columns(
-        [2.2, 1.8, 2.2],
+    city_col, time_col, result_col, note_col = st.columns(
+        [2.0, 1.5, 2.0, 2.0],
         vertical_alignment="center"
     )
 
@@ -265,7 +359,7 @@ for i in range(5):
 
     with time_col:
 
-        selected_time = st.selectbox(
+        st.selectbox(
             "當地時間",
             options=TIME_OPTIONS,
             key=f"time_{i}",
@@ -279,7 +373,10 @@ for i in range(5):
     # --------------------------------------------------------
 
     city_datetime = get_city_datetime(selected_city)
-    taiwan_datetime = get_taiwan_datetime(city_datetime)
+
+    taiwan_datetime = get_taiwan_datetime(
+        city_datetime
+    )
 
     day_diff = get_day_difference(
         city_datetime,
@@ -287,9 +384,22 @@ for i in range(5):
     )
 
     if st.session_state.selected_time == "即時":
-        taiwan_time_text = taiwan_datetime.strftime("%H:%M:%S")
+        taiwan_time_text = taiwan_datetime.strftime(
+            "%H:%M:%S"
+        )
     else:
-        taiwan_time_text = taiwan_datetime.strftime("%H:%M")
+        taiwan_time_text = taiwan_datetime.strftime(
+            "%H:%M"
+        )
+
+    # --------------------------------------------------------
+    # 時區備註
+    # --------------------------------------------------------
+
+    status, abbreviation, utc_text = get_timezone_info(
+        selected_city,
+        city_datetime
+    )
 
     # --------------------------------------------------------
     # 顯示台灣對應時間
@@ -307,6 +417,23 @@ for i in range(5):
         </div>
         """, unsafe_allow_html=True)
 
+    # --------------------------------------------------------
+    # 顯示時區備註
+    # --------------------------------------------------------
+
+    with note_col:
+
+        st.markdown(f"""
+        <div>
+            <div class="timezone-note">
+                {status} ({abbreviation})
+            </div>
+            <div class="timezone-offset">
+                {utc_text}
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
 
 # ============================================================
 #                    頁尾說明
@@ -317,6 +444,8 @@ st.markdown("""
     ※ 修改任一城市的時間，所有城市將同步使用相同的當地時間。
     <br>
     ※ 每個城市依照自身時區與當地日期進行換算，並自動處理夏令時間。
+    <br>
+    ※ 時區備註會依所選日期自動判斷夏令時間、標準時間及 UTC 偏移。
     <br>
     ※ 即時模式下，各城市顯示頁面最近一次更新時的時間。
 </div>
